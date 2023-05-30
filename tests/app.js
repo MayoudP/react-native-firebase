@@ -39,6 +39,7 @@ import '@react-native-firebase/remote-config';
 import * as remoteConfigModular from '@react-native-firebase/remote-config';
 import '@react-native-firebase/storage';
 import * as storageModular from '@react-native-firebase/storage';
+import * as databaseModular from '@react-native-firebase/database';
 import jet from 'jet/platform/react-native';
 import React from 'react';
 import { AppRegistry, Button, NativeModules, Text, View } from 'react-native';
@@ -56,6 +57,7 @@ jet.exposeContextProperty('perfModular', perfModular);
 jet.exposeContextProperty('appCheckModular', appCheckModular);
 jet.exposeContextProperty('messagingModular', messagingModular);
 jet.exposeContextProperty('storageModular', storageModular);
+jet.exposeContextProperty('databaseModular', databaseModular);
 
 firebase.database().useEmulator('localhost', 9000);
 firebase.auth().useEmulator('http://localhost:9099');
