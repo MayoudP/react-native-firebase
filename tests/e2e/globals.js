@@ -116,6 +116,10 @@ Object.defineProperty(global, 'storageModular', {
 Object.defineProperty(global, 'databaseModular', {
   get() {
     return jet.databaseModular;
+
+Object.defineProperty(global, 'installationsModular', {
+  get() {
+    return jet.installationsModular;
   },
 });
 
