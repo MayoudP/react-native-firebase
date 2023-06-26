@@ -53,6 +53,7 @@ export {
   fetch,
   setDefaults,
   setDefaultsFromResource,
+  onConfigUpdated,
 } from './modular/index';
 
 const statics = {
@@ -84,6 +85,7 @@ class FirebaseConfigModule extends FirebaseModule {
     this._lastFetchTime = -1;
     this._values = {};
     this._isWeb = Platform.OS !== 'ios' && Platform.OS !== 'android';
+    this._configUpdateListenerCount = 0;
   }
 
   get defaultConfig() {
@@ -282,6 +284,65 @@ class FirebaseConfigModule extends FirebaseModule {
     return this._promiseWithConstants(this.native.setDefaultsFromResource(resourceName));
   }
 
+  /**
+   * Registers a listener to changes in the configuration.
+   *
+   * @param listenerOrObserver - function called on config change
+   * @returns {function} unsubscribe listener
+   */
+  onConfigUpdated(listenerOrObserver) {
+    const listener = this._parseListener(listenerOrObserver);
+    let unsubscribed = false;
+    const subscription = this.emitter.addListener(
+      this.eventNameForApp('on_config_updated'),
+      event => {
+        const { resultType } = event;
+        if (resultType === 'success') {
+          listener({ updatedKeys: event.updatedKeys }, undefined);
+          return;
+        }
+
+        listener(undefined, {
+          code: event.code,
+          message: event.message,
+          nativeErrorMessage: event.nativeErrorMessage,
+        });
+      },
+    );
+    if (this._configUpdateListenerCount === 0) {
+      this.native.onConfigUpdated();
+    }
+
+    this._configUpdateListenerCount++;
+
+    return () => {
+      if (unsubscribed) {
+        // there is no harm in calling this multiple times to unsubscribe,
+        // but anything after the first call is a no-op
+        return;
+      } else {
+        unsubscribed = true;
+      }
+      subscription.remove();
+      this._configUpdateListenerCount--;
+      // In firebase-ios-sdk, it appears listener removal fails, so our native listeners accumulate
+      // if we try to remove them. Temporarily allow iOS native listener to stay active forever after
+      // first subscription for an app, until issue #11458 in firebase-ios-sdk repo is resolved.
+      // react-native-firebase native subscribe code won't add multiple native listeners for same app,
+      // so this prevents listener accumulation but means the web socket on iOS will never close.
+      // TODO: Remove when firebase-ios-sdk 10.12.0 is adopted, the PR to fix it should be included
+      if (this._configUpdateListenerCount === 0 && Platform.OS !== 'ios') {
+        this.native.removeConfigUpdateRegistration();
+      }
+    };
+  }
+
+  _parseListener(listenerOrObserver) {
+    return typeof listenerOrObserver === 'object'
+      ? listenerOrObserver.next.bind(listenerOrObserver)
+      : listenerOrObserver;
+  }
+
   _updateFromConstants(constants) {
     // Wrapped this as we update using sync getters initially for `defaultConfig` & `settings`
     if (constants.lastFetchTime) {
@@ -326,7 +387,7 @@ export default createModuleNamespace({
   version,
   namespace,
   nativeModuleName,
-  nativeEvents: false,
+  nativeEvents: ['on_config_updated'],
   hasMultiAppSupport: true,
   hasCustomUrlOrRegionSupport: false,
   ModuleClass: FirebaseConfigModule,
